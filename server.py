@@ -122,25 +122,27 @@ def process_capture(data):
             writer.writeheader()
             writer.writerows(rows)
         tmp_files.append(csv_path)
+# 5. Save files locally instead of uploading to Dropbox
+        local_base_dir = os.path.join(os.path.dirname(__file__), "local_outputs", site, base_name)
+        os.makedirs(local_base_dir, exist_ok=True)
 
-        # 5. Upload all to Dropbox (in parallel)
-        dbx = get_dropbox_client()
-        uploads = [
-            (dbx, json_path, "%s/%s.json" % (folder_path, base_name)),
-            (dbx, csv_path, "%s/%s.csv" % (folder_path, base_name)),
-        ]
+        # Move temp files into local_outputs
+        local_json_path = os.path.join(local_base_dir, base_name + ".json")
+        local_csv_path = os.path.join(local_base_dir, base_name + ".csv")
+        os.replace(json_path, local_json_path)
+        os.replace(csv_path, local_csv_path)
+
         if img_path:
-            uploads.append((dbx, img_path, "%s/%s.jpg" % (folder_path, base_name)))
+            local_img_path = os.path.join(local_base_dir, base_name + ".jpg")
+            os.replace(img_path, local_img_path)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(upload_file, *args) for args in uploads]
-            for future in concurrent.futures.as_completed(futures):
-                future.result()  # raises on failure
+        # Since we've moved them, don't attempt to delete them in finally:
+        tmp_files.clear()
 
         return {
             "success": True,
             "products_found": products_found,
-            "dropbox_folder": folder_path,
+            "local_folder": local_base_dir,
         }
     finally:
         for f in tmp_files:
